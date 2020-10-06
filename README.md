@@ -1,6 +1,6 @@
 # elvish-dotfile-manager
 
-###### A [Elvish](https://elv.sh) module to manage dotfiles.
+###### An [Elvish](https://elv.sh) module to manage dotfiles.
 
 ```elvish
 epm:install github.com/chlorm/elvish-dotfile-manager
