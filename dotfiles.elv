@@ -1,4 +1,4 @@
-# Copyright (c) 2016, 2018-2020, Cody Opel <cwopel@chlorm.net>
+# Copyright (c) 2016, 2018-2021, Cody Opel <cwopel@chlorm.net>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,6 +13,10 @@
 # limitations under the License.
 
 
+# FIXME: maybe make this a generic git updater
+#   https://github.com/chlorm/kratos/blob/c82657c9565ce041ade093c473c3f6d0b25be0ad/modules/updater/main.bash
+
+
 use re
 use str
 use github.com/chlorm/elvish-stl/io
@@ -21,190 +25,213 @@ use github.com/chlorm/elvish-stl/path
 use github.com/chlorm/elvish-stl/regex
 
 
-# TODO: Figure out windows support, possibly in a more minimal fashion.
+var EXT-GENERATE = '.generate'
+var EXT-INSTALL-PRE = '.install-pre'
+var EXT-INSTALL = '.install'
+var EXT-INSTALL-POST = '.install-post'
 
-fn -generate-hook [dotfile dotfiles-dir]{
-  echo 'Generating: '$dotfile >&2
-  local:file = (io:open (path:join $dotfiles-dir $dotfile))
+# TODO:
+# - Should we use an ext for os-specific hooks or require implementing os logic as needed in hooks
+# - allow many repos
+# - clone to a single directory
+# - link or install files from the lib dir
+# - track all linked/installed files
+# - add-repo, add-file, add-directory, update-file commands
+# - Figure out windows support, possibly in a more minimal fashion.
+#   - Windows cannot use symlinks as they require admistrator privledges.
+#   - Need to rewrite current system to install files instead of symlinking
 
-  # Parse for variables (e.g. `@{VAR}@`)
-  local:variables = [ (regex:find '(@{.*?}@)' $file) ]
-  # Parse for command substitutions (e.g. `@(command --arg)@`)
-  local:command-substitutions = [ (regex:find '(@\(.*?\)@)' $file) ]
+fn -evaluate-repls [fptr]{
+    var repls = [&]
 
-  local:repls = [&]
-  for variable $variables {
-    # Skip keys that already exist
-    if (has-key $repls $variable) {
-      continue
+    # Parse for variables (e.g. `@{VAR}@`)
+    var variables = [ (regex:find '(@{.*?}@)' $fptr) ]
+    for variable $variables {
+        # Skip keys that already exist
+        if (has-key $repls $variable) {
+            continue
+        }
+        # Evaluate variable
+        var result = (get-env (regex:find '@{(.*?)}@' $variable))
+        set repls[$variable] = $result
     }
-    # Evaluate variable
-    local:result = (get-env (regex:find '@{(.*?)}@' $variable))
-    repls[$variable]=$result
-  }
-  for local:command-substitution $command-substitutions {
-    # Skip keys that already exist
-    if (has-key $repls $variable) {
-      continue
+    # Parse for command substitutions (e.g. `@(command --arg)@`)
+    var commandSubstitutions = [ (regex:find '(@\(.*?\)@)' $fptr) ]
+    for commandSubstitution $commandSubstitutions {
+        # Skip keys that already exist
+        if (has-key $repls $commandSubstitution) {
+            continue
+        }
+        # Evaluate command substitution
+        var result = (
+            e:elvish -c (regex:find '@\((.*?)\)@' $commandSubstitution)
+        )
+        set repls[$commandSubstitution] = $result
     }
-    # Evaluate command substitution
-    local:result = (e:elvish -c (regex:find '@\((.*?)\)@' $command-substitution))
-    repls[$command-substitution]=$result
-  }
-  # Replace template sting with evaluated string.
-  for local:repl [ (keys $repls) ] {
-    file = (str:replace $repl $repls[$repl] $file)
-  }
 
-  local:out = (str:replace '.generate' '' $dotfile)
-
-  os:makedirs (path:dirname $E:HOME'/.'$out)
-  echo $file > $E:HOME'/.'$out
+    # Replace template sting with evaluated string.
+    for repl [ (keys $repls) ] {
+        var fptr = (str:replace $repl $repls[$repl] $fptr)
+    }
+    put $fptr
 }
 
-fn -install-hook [source-path dotfiles-dir]{
-  local:install-path = (path:join (get-env HOME) '.'$source-path)
-  if (not (os:exists $install-path)) {
-    echo 'Installing: '$source-path >&2
-  } else {
-    echo 'Updating: '$source-path >&2
-  }
+# FIXME: install to lib dir and symlink from lib?
+fn -install-hook [dotfilesDir dotfile]{
+    var installPath = (path:join (get-env 'HOME') '.'$dotfile)
+    if (not (os:exists $installPath)) {
+        echo 'Installing: '$dotfile >&2
+    } else {
+        echo 'Updating: '$dotfile >&2
+    }
 
-  # FIXME: Test symlink target before removing
-  if (os:exists $install-path) {
-    os:remove $install-path
-  }
+    # FIXME: Test symlink target before removing
+    if (os:exists $installPath) {
+        os:remove $installPath
+    }
 
-  if (not (os:is-dir (path:dirname $install-path))) {
-    os:makedirs (path:dirname $install-path)
-  }
-  os:symlink (path:join $dotfiles-dir $source-path) $install-path
+    if (not (os:is-dir (path:dirname $installPath))) {
+        os:makedirs (path:dirname $installPath)
+    }
+    os:symlink (path:join $dotfilesDir $dotfile) $installPath
 }
 
 # Checks if a path contains hidden files/directories (e.g. path/.hidden-file)
 fn -is-path-hidden [path]{
-  local:hidden = $false
-  local:p = $path
-  while $true {
-    if (has-prefix (path:basename $p) '.') {
-      hidden = $true
-      break
+    var hidden = $false
+    var p = $path
+    while $true {
+        if (str:has-prefix (path:basename $p) '.') {
+            set hidden = $true
+            break
+        }
+        set p = (path:dirname $p)
+        # Root of path
+        if (==s $p '.') {
+            break
+        }
     }
-    p = (path:dirname $p)
-    # Root of path
-    if (==s '.' $p) {
-      break
-    }
-  }
-  put $hidden
+    put $hidden
 }
 
-# FIXME: support multiple dirs (repos)
-fn install [dotfiles-dir]{
-  if (not (os:is-dir $dotfiles-dir)) {
-    fail 'Dotfile directory does not exist: '$dotfiles-dir
-  }
+fn install-singleton [dotfilesDir dotfile]{
+  var dotfilePath = (path:join $dotfilesDir $dotfile)
 
-  # FIXME: lookup XDG_CONFIG_HOME and use path rel to HOME
-  local:ignore-list = [
-    'config/systemd'
-  ]
+    # FIXME: install generated file with install-hook/.install
+    if (str:has-suffix $dotfile $EXT-GENERATE) {
+        var fptr = (-evaluate-repls (io:open $dotfilePath))
+        # Override vars
+        set dotfile = (str:replace $EXT-GENERATE '' $dotfile)
+        var dotfilePath = (path:join $dotfilesDir $dotfile)
+        # FIXME: not sure we want to install this way, but works for now
+        echo $fptr > $dotfilePath
+    }
 
-  local:dot-ignore = (path:join $dotfiles-dir '.dotignore')
-  if (os:is-file $dot-ignore) {
-    ignore-list = [
-      $@ignore-list
-      $dot-ignore
-      (io:cat $dot-ignore)
-    ]
-  }
-
-  # FIXME: switch to path:walk when adding Windows support
-  local:dotfiles = [
-    (e:find $dotfiles-dir -type f -not -iwholename '*.git*' -printf '%P\n')
-  ]
-  for local:dotfile $dotfiles {
-    local:dotfile-path = (path:join $dotfiles-dir $dotfile)
     # FIXME: this should not be necessary
-    if (not (os:exists $dotfile-path)) {
-      echo 'File does not exist: '$dotfile-path
-      continue
-    }
-
-    # Ignore hidden files
-    if (-is-path-hidden $dotfile) {
-      continue
-    }
-
-    local:ignore-skip = $false
-    for local:ignore $ignore-list {
-      if (==s '' $ignore) {
-        continue
-      }
-      # Respect ignoring files within ignored directories
-      if (re:match '.*'$ignore'.*' $dotfile) {
-        ignore-skip = $true
-        break
-      }
-    }
-    if $ignore-skip {
-      continue
-    }
-
-    # Exclude hooks
-    local:dotfile-hooks = [
-      'install-pre'
-      'install-post'
-      'generate-pre'
-      'generate-post'
-    ]
-    local:hook-skip=$false
-    for local:hook $dotfile-hooks {
-      if (has-suffix $dotfile $hook) {
-        hook-skip=$true
-        break
-      }
-    }
-    if $hook-skip {
-      continue
+    if (not (os:exists $dotfilePath)) {
+        fail 'File does not exist: '$dotfilePath
     }
 
     # PRE-Install
-    local:dot-install-pre = $dotfile-path'.install-pre'
-    if (os:exists $dot-install-pre) {
-      try {
-        e:elvish $dot-install-pre
-      } except error {
-        print $error
-      }
+    var dotInstallPre = $dotfilePath$EXT-INSTALL-PRE
+    if (os:exists $dotInstallPre) {
+        try {
+            e:elvish $dotInstallPre
+        } except error {
+            fail $error
+        }
     }
 
     # Install
-    if (has-suffix $dotfile '.generate') {
-      if (os:exists $dotfile-path'.generate-pre') {
-        e:elvish $dotfile-path'.generate-pre'
-      }
-      -generate-hook $dotfile $dotfiles-dir
-      if (os:exists %dotfile-path'.generate-post') {
-        e:elvish $dotfile-path'.generate-post'
-      }
+    var dotInstall = $dotfilePath$EXT-INSTALL
+    if (os:exists $dotInstall) {
+        e:elvish $dotInstall
     } else {
-      -install-hook $dotfile $dotfiles-dir
+        -install-hook $dotfilesDir $dotfile
     }
 
     # POST-Install
-    local:dot-install-post = $dotfile-path'.install-post'
-    if (os:exists $dot-install-post) {
-      try {
-        e:elvish $dot-install-post
-      } except error {
-        print $error
-      }
+    var dotInstallPost = $dotfilePath$EXT-INSTALL-POST
+    if (os:exists $dotInstallPost) {
+        try {
+            e:elvish $dotInstallPost
+        } except error {
+            print $error
+        }
     }
-  }
+}
+
+# FIXME: support multiple dirs (repos)
+fn install [dotfilesDir]{
+    if (not (os:is-dir $dotfilesDir)) {
+        fail 'Dotfile directory does not exist: '$dotfilesDir
+    }
+
+    # FIXME: lookup XDG_CONFIG_HOME and use path rel to HOME
+    var ignoreList = [
+        'config/systemd'
+    ]
+
+    var dotIgnore = (path:join $dotfilesDir '.dotignore')
+    if (os:is-file $dotIgnore) {
+        set ignoreList = [
+            $@ignoreList
+            $dotIgnore
+            (io:cat $dotIgnore)
+        ]
+    }
+
+    # FIXME: switch to path:walk when adding Windows support
+    var dotfiles = [(
+        e:find $dotfilesDir ^
+            '-type' 'f' ^
+            '-not' '-iwholename' '*.git*' ^
+            '-printf' '%P\n'
+    )]
+    for dotfile $dotfiles {
+        # Ignore hidden files
+        if (-is-path-hidden $dotfile) {
+            continue
+        }
+
+        var ignoreSkip = $false
+        for ignore $ignoreList {
+            if (==s '' $ignore) {
+                continue
+            }
+            # Respect ignoring files within ignored directories
+            if (re:match '.*'$ignore'.*' $dotfile) {
+                set ignoreSkip = $true
+                break
+            }
+        }
+        if $ignoreSkip {
+            continue
+        }
+
+        # Exclude hooks
+        # FIXME: don't exclude .install, allow install without an associated dotfile
+        var dotfileHooks = [
+            $EXT-INSTALL-PRE
+            $EXT-INSTALL
+            $EXT-INSTALL-POST
+        ]
+        var hookSkip = $false
+        for hook $dotfileHooks {
+            if (str:has-suffix $dotfile $hook) {
+                set hookSkip = $true
+                break
+            }
+        }
+        if $hookSkip {
+            continue
+        }
+
+        install-singleton $dotfilesDir $dotfile
+    }
 }
 
 fn update {
-  # TODO
+    # TODO
 }
 
