@@ -71,7 +71,7 @@ fn -evaluate-repls [fptr]{
 
     # Replace template sting with evaluated string.
     for repl [ (keys $repls) ] {
-        var fptr = (str:replace $repl $repls[$repl] $fptr)
+        set fptr = (str:replace $repl $repls[$repl] $fptr)
     }
     put $fptr
 }
@@ -122,7 +122,7 @@ fn install-singleton [dotfilesDir dotfile]{
         var fptr = (-evaluate-repls (io:open $dotfilePath))
         # Override vars
         set dotfile = (str:replace $EXT-GENERATE '' $dotfile)
-        var dotfilePath = (path:join $dotfilesDir $dotfile)
+        set dotfilePath = (path:join $dotfilesDir $dotfile)
         # FIXME: not sure we want to install this way, but works for now
         echo $fptr > $dotfilePath
     }
