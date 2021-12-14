@@ -41,7 +41,7 @@ var EXT-INSTALL-POST = '.install-post'
 #   - Windows cannot use symlinks as they require admistrator privledges.
 #   - Need to rewrite current system to install files instead of symlinking
 
-fn -evaluate-repls [fptr]{
+fn -evaluate-repls {|fptr|
     var repls = [&]
 
     # Parse for variables (e.g. `@{VAR}@`)
@@ -77,7 +77,7 @@ fn -evaluate-repls [fptr]{
 }
 
 # FIXME: install to lib dir and symlink from lib?
-fn -install-hook [dotfilesDir dotfile]{
+fn -install-hook {|dotfilesDir dotfile|
     var installPath = (path:join (get-env 'HOME') '.'$dotfile)
     if (not (os:exists $installPath)) {
         echo 'Installing: '$dotfile >&2
@@ -97,7 +97,7 @@ fn -install-hook [dotfilesDir dotfile]{
 }
 
 # Checks if a path contains hidden files/directories (e.g. path/.hidden-file)
-fn -is-path-hidden [path]{
+fn -is-path-hidden {|path|
     var hidden = $false
     var p = $path
     while $true {
@@ -114,7 +114,7 @@ fn -is-path-hidden [path]{
     put $hidden
 }
 
-fn install-singleton [dotfilesDir dotfile]{
+fn install-singleton {|dotfilesDir dotfile|
   var dotfilePath = (path:join $dotfilesDir $dotfile)
 
     # FIXME: install generated file with install-hook/.install
@@ -162,7 +162,7 @@ fn install-singleton [dotfilesDir dotfile]{
 }
 
 # FIXME: support multiple dirs (repos)
-fn install [dotfilesDir]{
+fn install {|dotfilesDir|
     if (not (os:is-dir $dotfilesDir)) {
         fail 'Dotfile directory does not exist: '$dotfilesDir
     }
