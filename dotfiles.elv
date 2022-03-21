@@ -137,7 +137,7 @@ fn install-singleton {|dotfilesDir dotfile|
     if (os:exists $dotInstallPre) {
         try {
             e:elvish $dotInstallPre
-        } except error {
+        } catch error {
             fail $error
         }
     }
@@ -155,7 +155,7 @@ fn install-singleton {|dotfilesDir dotfile|
     if (os:exists $dotInstallPost) {
         try {
             e:elvish $dotInstallPost
-        } except error {
+        } catch error {
             print $error
         }
     }
