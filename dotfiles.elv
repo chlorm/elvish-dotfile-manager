@@ -19,6 +19,7 @@
 
 use re
 use str
+use github.com/chlorm/elvish-stl/exec
 use github.com/chlorm/elvish-stl/io
 use github.com/chlorm/elvish-stl/os
 use github.com/chlorm/elvish-stl/path
@@ -183,7 +184,7 @@ fn install {|dotfilesDir|
 
     # FIXME: switch to path:walk when adding Windows support
     var dotfiles = [(
-        e:find $dotfilesDir ^
+        exec:cmd-out 'find' $dotfilesDir ^
             '-type' 'f' ^
             '-not' '-iwholename' '*.git*' ^
             '-printf' '%P\n'
