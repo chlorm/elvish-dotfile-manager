@@ -17,13 +17,14 @@
 #   https://github.com/chlorm/kratos/blob/c82657c9565ce041ade093c473c3f6d0b25be0ad/modules/updater/main.bash
 
 
-use re
-use str
+use github.com/chlorm/elvish-stl/env
 use github.com/chlorm/elvish-stl/exec
 use github.com/chlorm/elvish-stl/io
+use github.com/chlorm/elvish-stl/map
 use github.com/chlorm/elvish-stl/os
 use github.com/chlorm/elvish-stl/path
-use github.com/chlorm/elvish-stl/regex
+use github.com/chlorm/elvish-stl/re
+use github.com/chlorm/elvish-stl/str
 
 
 var EXT-GENERATE = '.generate'
@@ -46,32 +47,32 @@ fn -evaluate-repls {|fptr|
     var repls = [&]
 
     # Parse for variables (e.g. `@{VAR}@`)
-    var variables = [ (regex:find '(@{.*?}@)' $fptr) ]
+    var variables = [ (re:find '(@{.*?}@)' $fptr) ]
     for variable $variables {
         # Skip keys that already exist
-        if (has-key $repls $variable) {
+        if (map:has-key $repls $variable) {
             continue
         }
         # Evaluate variable
-        var result = (get-env (regex:find '@{(.*?)}@' $variable))
+        var result = (env:get (re:find '@{(.*?)}@' $variable))
         set repls[$variable] = $result
     }
     # Parse for command substitutions (e.g. `@(command --arg)@`)
-    var commandSubstitutions = [ (regex:find '(@\(.*?\)@)' $fptr) ]
+    var commandSubstitutions = [ (re:find '(@\(.*?\)@)' $fptr) ]
     for commandSubstitution $commandSubstitutions {
         # Skip keys that already exist
-        if (has-key $repls $commandSubstitution) {
+        if (map:has-key $repls $commandSubstitution) {
             continue
         }
         # Evaluate command substitution
         var result = (
-            e:elvish -c (regex:find '@\((.*?)\)@' $commandSubstitution)
+            e:elvish -c (re:find '@\((.*?)\)@' $commandSubstitution)
         )
         set repls[$commandSubstitution] = $result
     }
 
     # Replace template sting with evaluated string.
-    for repl [ (keys $repls) ] {
+    for repl [ (map:keys $repls) ] {
         set fptr = (str:replace $repl $repls[$repl] $fptr)
     }
     put $fptr
