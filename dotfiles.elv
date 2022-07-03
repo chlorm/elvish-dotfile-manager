@@ -80,7 +80,7 @@ fn -evaluate-repls {|fptr|
 
 # FIXME: install to lib dir and symlink from lib?
 fn -install-hook {|dotfilesDir dotfile|
-    var installPath = (path:join (get-env 'HOME') '.'$dotfile)
+    var installPath = (path:join (path:home) '.'$dotfile)
     if (not (os:exists $installPath)) {
         echo 'Installing: '$dotfile >&2
     } else {
