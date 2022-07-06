@@ -25,6 +25,7 @@ use github.com/chlorm/elvish-stl/os
 use github.com/chlorm/elvish-stl/path
 use github.com/chlorm/elvish-stl/re
 use github.com/chlorm/elvish-stl/str
+use github.com/chlorm/elvish-xdg/xdg-dirs
 
 
 var EXT-GENERATE = '.generate'
@@ -168,6 +169,10 @@ fn install {|dotfilesDir|
     if (not (os:is-dir $dotfilesDir)) {
         fail 'Dotfile directory does not exist: '$dotfilesDir
     }
+
+    # FIXME: should this be required? Maybe for generated files?
+    # Maybe check in generated for XDG_ and only look them up as needed.
+    xdg-dirs:populate-env
 
     # FIXME: lookup XDG_CONFIG_HOME and use path rel to HOME
     var ignoreList = [
