@@ -1,4 +1,4 @@
-# Copyright (c) 2016, 2018-2021, Cody Opel <cwopel@chlorm.net>
+# Copyright (c) 2016, 2018-2022, Cody Opel <cwopel@chlorm.net>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -121,9 +121,29 @@ fn -sub-repls {|fileStr|
     put $fileStr
 }
 
-# FIXME: install to lib dir and symlink from lib?
-fn -install-hook {|dotfilesDir dotfile|
-    var installPath = (path:join (path:home) '.'$dotfile)
+fn -install-path {|dotfile|
+    put (path:join (path:home) '.'$dotfile)
+}
+
+fn -hook-generate {|dotfilePath dotfilesDir dotfile|
+    var fileStr = (-sub-repls (io:open $dotfilePath))
+    # Override vars
+    set dotfile = (str:replace $EXT-GENERATE '' $dotfile)
+    set dotfilePath = (path:join $dotfilesDir $dotfile)
+    # FIXME: not sure we want to install this way, but works for now
+    echo $fileStr > $dotfilePath
+}
+
+fn -hook-install-pre {|dotInstallPre|
+    try {
+        e:elvish $dotInstallPre
+    } catch error {
+        fail $error
+    }
+}
+
+fn -hook-install {|dotfilesDir dotfile|
+    var installPath = (-install-path $dotfile)
     if (not (os:exists $installPath)) {
         echo 'Installing: '$dotfile >&2
     } else {
@@ -141,50 +161,29 @@ fn -install-hook {|dotfilesDir dotfile|
     os:symlink (path:join $dotfilesDir $dotfile) $installPath
 }
 
-# Checks if a path contains hidden files/directories (e.g. path/.hidden-file)
-fn -is-path-hidden {|path|
-    var hidden = $false
-    var p = $path
-    while $true {
-        if (str:has-prefix (path:basename $p) '.') {
-            set hidden = $true
-            break
-        }
-        set p = (path:dirname $p)
-        # Root of path
-        if (==s $p '.') {
-            break
-        }
+
+fn -hook-install-post {|dotInstallPost|
+    try {
+        e:elvish $dotInstallPost
+    } catch error {
+        print $error
     }
-    put $hidden
 }
 
 fn install-singleton {|dotfilesDir dotfile|
-  var dotfilePath = (path:join $dotfilesDir $dotfile)
+    var dotfilePath = (path:join $dotfilesDir $dotfile)
 
-    # FIXME: install generated file with install-hook/.install
+    # Generate
     if (str:has-suffix $dotfile $EXT-GENERATE) {
-        var fptr = (-sub-repls (io:open $dotfilePath))
-        # Override vars
-        set dotfile = (str:replace $EXT-GENERATE '' $dotfile)
-        set dotfilePath = (path:join $dotfilesDir $dotfile)
-        # FIXME: not sure we want to install this way, but works for now
-        echo $fptr > $dotfilePath
-    }
-
-    # FIXME: this should not be necessary
-    if (not (os:exists $dotfilePath)) {
-        fail 'File does not exist: '$dotfilePath
+        -hook-generate $dotfilePath $dotfilesDir $dotfile
+    } elif (os:exists $dotfilePath$EXT-GENERATE) {
+        return
     }
 
     # PRE-Install
     var dotInstallPre = $dotfilePath$EXT-INSTALL-PRE
     if (os:exists $dotInstallPre) {
-        try {
-            e:elvish $dotInstallPre
-        } catch error {
-            fail $error
-        }
+        -hook-install-pre $dotInstallPre
     }
 
     # Install
@@ -192,17 +191,13 @@ fn install-singleton {|dotfilesDir dotfile|
     if (os:exists $dotInstall) {
         e:elvish $dotInstall
     } else {
-        -install-hook $dotfilesDir $dotfile
+        -hook-install $dotfilesDir $dotfile
     }
 
     # POST-Install
     var dotInstallPost = $dotfilePath$EXT-INSTALL-POST
     if (os:exists $dotInstallPost) {
-        try {
-            e:elvish $dotInstallPost
-        } catch error {
-            print $error
-        }
+        -hook-install-post $dotInstallPost
     }
 }
 
