@@ -264,6 +264,9 @@ fn -find-files {|dotfilesDir|
 
     var dotfiles = [ ]
     # These loops should remain synchronous to avoid hitting open file limits.
+    # The issue is actually install-singleton/-hook-generate accessing to
+    # many files.  Making this sync is slow enough to avoid hitting the limit
+    # and still faster than running install-singleton in sync.
     for path [ (path:walk $dotfilesDir) ] {
         var dir = $path['root']
         for file $path['files'] {
