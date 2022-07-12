@@ -263,7 +263,8 @@ fn -find-files {|dotfilesDir|
     var ignoreList = (-build-ignore-list $dotfilesDir)
 
     var dotfiles = [ ]
-    path:walk $dotfilesDir | each {|path|
+    # These loops should remain synchronous to avoid hitting open file limits.
+    for path [ (path:walk $dotfilesDir) ] {
         var dir = $path['root']
         for file $path['files'] {
             var dotfile = (path:join $dir $file)
