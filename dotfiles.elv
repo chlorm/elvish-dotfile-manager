@@ -58,7 +58,6 @@ fn -environment-variable-evaluate {|varNameStr|
     env:get $varNameStr
 }
 
-# FIXME: output truncates when parallelized
 fn -environment-variable-repls {|fileStr|
     -environment-variable-parse-tmpl $fileStr | peach {|v|
         put [
