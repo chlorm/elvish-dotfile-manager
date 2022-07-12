@@ -44,39 +44,82 @@ var EXT-INSTALL-POST = '.install-post'
 #   - Windows cannot use symlinks as they require admistrator privledges.
 #   - Need to rewrite current system to install files instead of symlinking
 
-fn -evaluate-repls {|fptr|
-    var repls = [&]
+# Parse `@{VAR}@`
+fn -environment-variable-parse-tmpl {|fileStr|
+    re:find '(@{.*?}@)' $fileStr
+}
 
-    # Parse for variables (e.g. `@{VAR}@`)
-    var variables = [ (re:find '(@{.*?}@)' $fptr) ]
-    for variable $variables {
-        # Skip keys that already exist
-        if (map:has-key $repls $variable) {
-            continue
-        }
-        # Evaluate variable
-        var result = (env:get (re:find '@{(.*?)}@' $variable))
-        set repls[$variable] = $result
-    }
-    # Parse for command substitutions (e.g. `@(command --arg)@`)
-    var commandSubstitutions = [ (re:find '(@\(.*?\)@)' $fptr) ]
-    for commandSubstitution $commandSubstitutions {
-        # Skip keys that already exist
-        if (map:has-key $repls $commandSubstitution) {
-            continue
-        }
-        # Evaluate command substitution
-        var result = (
-            e:elvish -c (re:find '@\((.*?)\)@' $commandSubstitution)
-        )
-        set repls[$commandSubstitution] = $result
-    }
+fn -environment-variable-parse-tmpl-inner {|varTmplStr|
+    re:find '@{(.*?)}@' $varTmplStr
+}
 
-    # Replace template sting with evaluated string.
-    for repl [ (map:keys $repls) ] {
-        set fptr = (str:replace $repl $repls[$repl] $fptr)
+# FIXME: add try/catch with useful error
+fn -environment-variable-evaluate {|varNameStr|
+    env:get $varNameStr
+}
+
+# FIXME: output truncates when parallelized
+fn -environment-variable-repls {|fileStr|
+    -environment-variable-parse-tmpl $fileStr | peach {|v|
+        put [
+            $v
+            (-environment-variable-parse-tmpl-inner $v)
+        ]
     }
-    put $fptr
+}
+
+# Parse `@(command --arg)@`
+fn -command-substitution-parse-tmpl {|fileStr|
+    re:find '(@\(.*?\)@)' $fileStr
+}
+
+fn -command-substitution-parse-tmpl-inner {|csTmpl|
+    re:find '@\((.*?)\)@' $csTmpl
+}
+
+fn -command-substatution-evaluate {|cmd|
+    put (e:elvish -c $cmd)
+}
+
+fn -command-substitution-repls {|fileStr|
+    -command-substitution-parse-tmpl $fileStr | peach {|cs|
+        put [
+            $cs
+            (-command-substitution-parse-tmpl-inner $cs)
+        ]
+    }
+}
+
+# Replace template sting with evaluated string.
+fn -repl-tmpl {|replPair fileStr|
+    str:replace $replPair[0] $replPair[1] $fileStr
+}
+
+fn -evaluate-repls {|fileStr|
+    run-parallel {
+        -environment-variable-repls $fileStr | peach {|r|
+            put [
+                $r[0]
+                (-environment-variable-evaluate $r[1])
+            ]
+        }
+    } {
+        -command-substitution-repls $fileStr | peach {|r|
+            put [
+                $r[0]
+                (-command-substitution-evaluate $r[1])
+            ]
+        }
+    }
+}
+
+# TODO: maybe make repls an arg instead of calling here so that this only
+#       subs repls.  Input is already sync so it would have no affect.
+fn -sub-repls {|fileStr|
+    for i [ (-evaluate-repls $fileStr) ] {
+        set fileStr = (-repl-tmpl $i $fileStr)
+    }
+    put $fileStr
 }
 
 # FIXME: install to lib dir and symlink from lib?
@@ -122,7 +165,7 @@ fn install-singleton {|dotfilesDir dotfile|
 
     # FIXME: install generated file with install-hook/.install
     if (str:has-suffix $dotfile $EXT-GENERATE) {
-        var fptr = (-evaluate-repls (io:open $dotfilePath))
+        var fptr = (-sub-repls (io:open $dotfilePath))
         # Override vars
         set dotfile = (str:replace $EXT-GENERATE '' $dotfile)
         set dotfilePath = (path:join $dotfilesDir $dotfile)
