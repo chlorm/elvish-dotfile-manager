@@ -192,76 +192,94 @@ fn install-singleton {|dotfilesDir dotfile|
     }
 }
 
-# FIXME: support multiple dirs (repos)
-fn install {|dotfilesDir|
-    if (not (os:is-dir $dotfilesDir)) {
-        fail 'Dotfile directory does not exist: '$dotfilesDir
-    }
+fn -path-rel-to-home {|path|
+    var home = (path:absolute (path:home))
+    set path = (path:relative-to $path $home)
+    set path = (re:replace '^\.' '' $path)
+    put $path
+}
 
-    # FIXME: should this be required? Maybe for generated files?
-    # Maybe check in generated for XDG_ and only look them up as needed.
-    xdg-dirs:populate-env
+fn -path-rel-to-dotfilesdir {|dotfilesDir path|
+    set dotfilesDir = (path:absolute $dotfilesDir)
+    path:relative-to $path $dotfilesDir
+}
 
-    # FIXME: lookup XDG_CONFIG_HOME and use path rel to HOME
+fn -build-ignore-list {|dotfilesDir|
     var ignoreList = [
-        'config/systemd'
+        (path:join (-path-rel-to-home (xdg-dirs:config-home)) 'systemd')
     ]
 
     var dotIgnore = (path:join $dotfilesDir '.dotignore')
     if (os:is-file $dotIgnore) {
         set ignoreList = [
             $@ignoreList
-            $dotIgnore
-            (io:cat $dotIgnore)
+            (-path-rel-to-dotfilesdir $dotfilesDir $dotIgnore)
+            (str:to-lines (io:open $dotIgnore))
         ]
     }
+    put $ignoreList
+}
 
-    # FIXME: switch to path:walk when adding Windows support
-    var dotfiles = [(
-        exec:cmd-out 'find' $dotfilesDir ^
-            '-type' 'f' ^
-            '-not' '-iwholename' '*.git*' ^
-            '-printf' '%P\n'
-    )]
-    for dotfile $dotfiles {
-        # Ignore hidden files
-        if (-is-path-hidden $dotfile) {
+fn -should-ignore {|ignoreList dotfilesDir dotfile|
+    # Exclude hooks
+    # FIXME: don't exclude .install, allow install without an associated dotfile
+    var dotfileHooks = [
+        $EXT-INSTALL-PRE
+        $EXT-INSTALL
+        $EXT-INSTALL-POST
+    ]
+    for hook $dotfileHooks {
+        if (str:has-suffix $dotfile $hook) {
+            put $true
+            return
+        }
+    }
+
+    set dotfile = (-path-rel-to-dotfilesdir $dotfilesDir $dotfile)
+    # Ignore hidden files
+    if (path:is-hidden $dotfile) {
+        put $true
+        return
+    }
+
+    for ignore $ignoreList {
+        if (==s '' $ignore) {
             continue
         }
+        # Respect ignoring files within ignored directories
+        if (re:match '.*'$ignore'.*' $dotfile) {
+            put $true
+            return
+        }
+    }
+    put $false
+}
 
-        var ignoreSkip = $false
-        for ignore $ignoreList {
-            if (==s '' $ignore) {
+fn -find-files {|dotfilesDir|
+    if (not (os:is-dir $dotfilesDir)) {
+        fail 'Dotfile directory does not exist: '$dotfilesDir
+    }
+
+    var ignoreList = (-build-ignore-list $dotfilesDir)
+
+    var dotfiles = [ ]
+    path:walk $dotfilesDir | each {|path|
+        var dir = $path['root']
+        for file $path['files'] {
+            var dotfile = (path:join $dir $file)
+            if (-should-ignore $ignoreList $dotfilesDir $dotfile) {
                 continue
             }
-            # Respect ignoring files within ignored directories
-            if (re:match '.*'$ignore'.*' $dotfile) {
-                set ignoreSkip = $true
-                break
-            }
+            put (-path-rel-to-dotfilesdir $dotfilesDir $dotfile)
         }
-        if $ignoreSkip {
-            continue
-        }
+    }
+}
 
-        # Exclude hooks
-        # FIXME: don't exclude .install, allow install without an associated dotfile
-        var dotfileHooks = [
-            $EXT-INSTALL-PRE
-            $EXT-INSTALL
-            $EXT-INSTALL-POST
-        ]
-        var hookSkip = $false
-        for hook $dotfileHooks {
-            if (str:has-suffix $dotfile $hook) {
-                set hookSkip = $true
-                break
-            }
-        }
-        if $hookSkip {
-            continue
-        }
+# FIXME: support multiple dirs (repos)
+fn install {|dotfilesDir|
+    xdg-dirs:populate-env
 
+    -find-files $dotfilesDir | peach {|dotfile|
         install-singleton $dotfilesDir $dotfile
     }
 }
