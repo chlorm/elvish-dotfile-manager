@@ -134,9 +134,9 @@ fn -hook-generate {|dotfilePath dotfilesDir dotfile|
     echo $fileStr > $dotfilePath
 }
 
-fn -hook-install-pre {|dotInstallPre|
+fn -hook-run-script {|script|
     try {
-        e:elvish $dotInstallPre
+        e:elvish $script
     } catch error {
         fail $error
     }
@@ -161,15 +161,6 @@ fn -hook-install {|dotfilesDir dotfile|
     os:symlink (path:join $dotfilesDir $dotfile) $installPath
 }
 
-
-fn -hook-install-post {|dotInstallPost|
-    try {
-        e:elvish $dotInstallPost
-    } catch error {
-        print $error
-    }
-}
-
 fn install-singleton {|dotfilesDir dotfile|
     var dotfilePath = (path:join $dotfilesDir $dotfile)
 
@@ -183,13 +174,13 @@ fn install-singleton {|dotfilesDir dotfile|
     # PRE-Install
     var dotInstallPre = $dotfilePath$EXT-INSTALL-PRE
     if (os:exists $dotInstallPre) {
-        -hook-install-pre $dotInstallPre
+        -hook-run-script $dotInstallPre
     }
 
     # Install
     var dotInstall = $dotfilePath$EXT-INSTALL
     if (os:exists $dotInstall) {
-        e:elvish $dotInstall
+        -hook-run-script $dotInstall
     } else {
         -hook-install $dotfilesDir $dotfile
     }
@@ -197,7 +188,7 @@ fn install-singleton {|dotfilesDir dotfile|
     # POST-Install
     var dotInstallPost = $dotfilePath$EXT-INSTALL-POST
     if (os:exists $dotInstallPost) {
-        -hook-install-post $dotInstallPost
+        -hook-run-script $dotInstallPost
     }
 }
 
