@@ -76,7 +76,7 @@ fn -command-substitution-parse-tmpl-inner {|csTmpl|
     re:find '@\((.*?)\)@' $csTmpl
 }
 
-fn -command-substatution-evaluate {|cmd|
+fn -command-substitution-evaluate {|cmd|
     put (e:elvish -c $cmd)
 }
 
