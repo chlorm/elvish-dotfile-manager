@@ -77,7 +77,7 @@ fn -command-substitution-parse-tmpl-inner {|csTmpl|
 }
 
 fn -command-substitution-evaluate {|cmd|
-    put (e:elvish -c $cmd)
+    put (e:elvish -c 'print ('$cmd')')
 }
 
 fn -command-substitution-repls {|fileStr|
