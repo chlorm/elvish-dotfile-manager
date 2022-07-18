@@ -285,7 +285,9 @@ fn install {|dotfilesDir|
     xdg-dirs:populate-env
 
     -find-files $dotfilesDir | peach {|dotfile|
-        install-singleton $dotfilesDir $dotfile
+        try {
+            install-singleton $dotfilesDir $dotfile
+        } catch _ { }
     }
 }
 
