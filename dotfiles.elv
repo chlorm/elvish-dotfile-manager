@@ -23,6 +23,7 @@ use github.com/chlorm/elvish-stl/io
 use github.com/chlorm/elvish-stl/map
 use github.com/chlorm/elvish-stl/os
 use github.com/chlorm/elvish-stl/path
+use github.com/chlorm/elvish-stl/platform
 use github.com/chlorm/elvish-stl/re
 use github.com/chlorm/elvish-stl/str
 use github.com/chlorm/elvish-xdg/xdg-dirs
@@ -158,7 +159,12 @@ fn -hook-install {|dotfilesDir dotfile|
     if (not (os:is-dir (path:dirname $installPath))) {
         os:makedirs (path:dirname $installPath)
     }
-    os:symlink (path:join $dotfilesDir $dotfile) $installPath
+    var source = (path:join $dotfilesDir $dotfile)
+    if $platform:is-windows {
+        os:link $source $installPath
+    } else {
+        os:symlink $source $installPath
+    }
 }
 
 fn install-singleton {|dotfilesDir dotfile|
