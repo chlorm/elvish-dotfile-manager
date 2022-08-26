@@ -174,7 +174,8 @@ fn install-singleton {|dotfilesDir dotfile|
     if (str:has-suffix $dotfile $EXT-GENERATE) {
         -hook-generate $dotfilePath $dotfilesDir $dotfile
         set dotfile = (re:replace '.generate$' '' $dotfile)
-    } elif (os:exists $dotfilePath$EXT-GENERATE) {
+    }
+    if (os:exists $dotfilePath$EXT-GENERATE) {
         return
     }
 
